@@ -83,6 +83,33 @@ const initialHistory: ConfirmationEntry[] = [
   { id: 'hist-2', month: '2026-10', status: 'confirmed', summary: 'Показания и квитанции совпадают', updatedAt: '2026-10-02 09:20' },
 ];
 
+const formatStructuredValue = (value: number | string | null | undefined, fallback = 'Нет данных') => {
+  if (value === null || value === undefined || value === '') return fallback;
+  return String(value);
+};
+
+const countMissingStructuredFields = (structuredBills: ReturnType<typeof buildStructuredBillDocument>[]) =>
+  structuredBills.reduce((total, bill) => {
+    return total + bill.services.reduce((serviceTotal, service) => {
+      const fields = [
+        service.service.value,
+        service.unit.value,
+        service.volume.value,
+        service.tariff.value,
+        service.currentCharge.value,
+        service.coefficient.value,
+        service.recalculation.value,
+        service.reduction.value,
+        service.debtOrOverpayment.value,
+        service.payments.value,
+        service.penalties.value,
+        service.totalDue.value,
+      ];
+
+      return serviceTotal + fields.filter((field) => field === null || field === undefined || field === '').length;
+    }, 0);
+  }, 0);
+
 function App() {
   const [meters, setMeters] = useState<Meter[]>(() => {
     const saved = localStorage.getItem('jkh-helper-meters');
@@ -164,6 +191,7 @@ function App() {
       ),
     [bills],
   );
+  const missingStructuredFields = useMemo(() => countMissingStructuredFields(structuredBills), [structuredBills]);
   const verificationChecks = useMemo(() => {
     const arithmeticStatus = comparison.some((item) => item.status === 'issue') ? 'mismatch' : comparison.some((item) => item.status === 'warning') ? 'needs-check' : 'verified';
     const readingStatus = monthChecklist.length > 0 ? 'needs-check' : 'verified';
@@ -628,6 +656,35 @@ function App() {
 
       <section className="panel">
         <h2>Структура квитанции</h2>
+        <div className="document-status-strip">
+          <div>
+            <span>Заполнено</span>
+            <strong>{structuredBills.reduce((sum, bill) => sum + bill.services.reduce((count, service) => count + [
+              service.service.value,
+              service.unit.value,
+              service.volume.value,
+              service.tariff.value,
+              service.currentCharge.value,
+              service.coefficient.value,
+              service.recalculation.value,
+              service.reduction.value,
+              service.debtOrOverpayment.value,
+              service.payments.value,
+              service.penalties.value,
+              service.totalDue.value,
+            ].filter((field) => field !== null && field !== undefined && field !== '').length, 0), 0)}
+            </strong>
+          </div>
+          <div>
+            <span>Не хватает</span>
+            <strong>{missingStructuredFields}</strong>
+          </div>
+          <div>
+            <span>Хранение</span>
+            <strong>Локально</strong>
+          </div>
+        </div>
+
         <div className="structured-bill-list">
           {structuredBills.map((bill) => (
             <article key={bill.documentId} className="structured-bill-card">
@@ -649,50 +706,50 @@ function App() {
               {bill.services.map((service) => (
                 <div key={`${bill.documentId}-${service.service.raw ?? service.service.value}`} className="structured-service">
                   <div className="structured-service-topline">
-                    <strong>{service.service.value ?? 'Услуга'}</strong>
-                    <span>{service.unit.value ?? '—'}</span>
+                    <strong>{formatStructuredValue(service.service.value, 'Услуга не определена')}</strong>
+                    <span>{formatStructuredValue(service.unit.value, 'ед. не указаны')}</span>
                   </div>
 
                   <div className="structured-grid">
                     <div>
                       <span>Объём</span>
-                      <strong>{service.volume.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.volume.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Тариф</span>
-                      <strong>{service.tariff.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.tariff.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Начисление</span>
-                      <strong>{service.currentCharge.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.currentCharge.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Коэффициент</span>
-                      <strong>{service.coefficient.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.coefficient.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Перерасчёт</span>
-                      <strong>{service.recalculation.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.recalculation.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Снижение</span>
-                      <strong>{service.reduction.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.reduction.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Долг/переплата</span>
-                      <strong>{service.debtOrOverpayment.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.debtOrOverpayment.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Платежи</span>
-                      <strong>{service.payments.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.payments.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Пени</span>
-                      <strong>{service.penalties.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.penalties.value, 'Нет данных')}</strong>
                     </div>
                     <div>
                       <span>Итог</span>
-                      <strong>{service.totalDue.value ?? '—'}</strong>
+                      <strong>{formatStructuredValue(service.totalDue.value, 'Нет данных')}</strong>
                     </div>
                   </div>
 
