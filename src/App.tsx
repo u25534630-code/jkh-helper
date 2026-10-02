@@ -164,6 +164,53 @@ function App() {
       ),
     [bills],
   );
+  const verificationChecks = useMemo(() => {
+    const arithmeticStatus = comparison.some((item) => item.status === 'issue') ? 'mismatch' : comparison.some((item) => item.status === 'warning') ? 'needs-check' : 'verified';
+    const readingStatus = monthChecklist.length > 0 ? 'needs-check' : 'verified';
+    const tariffStatus = bills.some((bill) => bill.rows.some((row) => row.status === 'issue')) ? 'mismatch' : bills.some((bill) => bill.rows.some((row) => row.status === 'needs-check')) ? 'needs-check' : 'verified';
+    const statusResult = bills.every((bill) => bill.rows.every((row) => row.status === 'confirmed')) ? 'verified' : bills.some((bill) => bill.rows.some((row) => row.status === 'issue')) ? 'mismatch' : 'needs-check';
+    const dataStatus = structuredBills.every((bill) => bill.services.every((service) => Boolean(service.source.page))) ? 'verified' : 'needs-data';
+    const storageStatus = documents.length > 0 ? 'verified' : 'needs-data';
+
+    return [
+      {
+        id: 'arithmetic',
+        title: 'Арифметика',
+        status: arithmeticStatus,
+        note: 'Проверка разницы между расходом по счётчику и значением по квитанции.',
+      },
+      {
+        id: 'readings',
+        title: 'Показания и расход',
+        status: readingStatus,
+        note: 'Проверка, что показания не пустые, не неразборчивые и расход рассчитывается по подтверждённой базе.',
+      },
+      {
+        id: 'tariffs',
+        title: 'Тарифы и основания начисления',
+        status: tariffStatus,
+        note: 'Проверка того, что тариф и основания начисления разнесены отдельно от фактического расхода.',
+      },
+      {
+        id: 'result-status',
+        title: 'Статусы результата',
+        status: statusResult,
+        note: 'Оценка, подтверждено ли состояние квитанции или есть спорные участки.',
+      },
+      {
+        id: 'source-data',
+        title: 'Данные и хранение',
+        status: dataStatus,
+        note: 'Каждое поле должно иметь источник и храниться отдельно от кода.',
+      },
+      {
+        id: 'storage',
+        title: 'Хранение и исходный документ',
+        status: storageStatus,
+        note: 'Фото и исходные документы хранятся отдельно от логики и проверяются по странице.',
+      },
+    ];
+  }, [bills, comparison, documents.length, monthChecklist.length, structuredBills]);
   const currentMonthStatus = monthChecklist.length === 0 ? 'confirmed' : monthChecklist.some((item) => item.severity === 'issue') ? 'issue' : 'warning';
   const transferText = useMemo(() => {
     const lines = [
@@ -656,6 +703,23 @@ function App() {
                   </div>
                 </div>
               ))}
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>Проверки по README</h2>
+        <div className="verification-list">
+          {verificationChecks.map((check) => (
+            <article key={check.id} className={`verification-item verification-${check.status}`}>
+              <div className="verification-header">
+                <strong>{check.title}</strong>
+                <span className={`status status-${check.status === 'verified' ? 'confirmed' : check.status === 'needs-data' ? 'needs-check' : check.status}`}>
+                  {check.status === 'verified' ? 'Подтверждено' : check.status === 'needs-check' ? 'Проверить' : check.status === 'needs-data' ? 'Нет данных' : 'Есть расхождение'}
+                </span>
+              </div>
+              <p>{check.note}</p>
             </article>
           ))}
         </div>

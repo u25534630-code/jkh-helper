@@ -583,9 +583,15 @@ h1 {
   color: #9a6a00;
 }
 
-.status-issue {
+.status-issue,
+.status-mismatch {
   background: rgba(239, 68, 68, 0.12);
   color: #b3261e;
+}
+
+.status-verified {
+  background: rgba(22, 163, 74, 0.12);
+  color: #0d7d48;
 }
 
 .panel {
@@ -596,6 +602,47 @@ h1 {
 .panel h2 {
   margin-top: 0;
   margin-bottom: 14px;
+}
+
+.verification-list {
+  display: grid;
+  gap: 12px;
+}
+
+.verification-item {
+  border: 1px solid rgba(112, 134, 164, 0.24);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(247, 250, 255, 0.9);
+}
+
+.verification-verified {
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+.verification-needs-check {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.verification-needs-data {
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.verification-mismatch {
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.verification-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.verification-item p {
+  margin: 0;
+  color: #335776;
 }
 
 .comparison-list {
