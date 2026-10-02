@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   buildMeterComparison,
   buildMonthChecklist,
+  buildStructuredBillDocument,
   calculateConsumption,
   parseVoiceCommand,
   type BillDocument,
@@ -152,6 +153,17 @@ function App() {
 
   const comparison = useMemo(() => buildMeterComparison(meters, bills), [meters, bills]);
   const monthChecklist = useMemo(() => buildMonthChecklist(meters, bills), [meters, bills]);
+  const structuredBills = useMemo(
+    () =>
+      bills.map((bill) =>
+        buildStructuredBillDocument(bill, {
+          fileName: `${bill.provider}-${bill.period}.pdf`,
+          localOnly: true,
+          pages: ['page-1'],
+        }),
+      ),
+    [bills],
+  );
   const currentMonthStatus = monthChecklist.length === 0 ? 'confirmed' : monthChecklist.some((item) => item.severity === 'issue') ? 'issue' : 'warning';
   const transferText = useMemo(() => {
     const lines = [
@@ -564,6 +576,88 @@ function App() {
         <div className="export-preview">
           <h3>Текст для передачи</h3>
           <pre>{transferText}</pre>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>Структура квитанции</h2>
+        <div className="structured-bill-list">
+          {structuredBills.map((bill) => (
+            <article key={bill.documentId} className="structured-bill-card">
+              <div className="structured-header">
+                <div>
+                  <span className="tiny-label">Месяц</span>
+                  <strong>{bill.calculationMonth.value ?? '—'}</strong>
+                </div>
+                <div>
+                  <span className="tiny-label">Поставщик</span>
+                  <strong>{bill.provider.value ?? '—'}</strong>
+                </div>
+                <div>
+                  <span className="tiny-label">Файл</span>
+                  <strong>{bill.sourceDocument.fileName ?? 'Локальный файл'}</strong>
+                </div>
+              </div>
+
+              {bill.services.map((service) => (
+                <div key={`${bill.documentId}-${service.service.raw ?? service.service.value}`} className="structured-service">
+                  <div className="structured-service-topline">
+                    <strong>{service.service.value ?? 'Услуга'}</strong>
+                    <span>{service.unit.value ?? '—'}</span>
+                  </div>
+
+                  <div className="structured-grid">
+                    <div>
+                      <span>Объём</span>
+                      <strong>{service.volume.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Тариф</span>
+                      <strong>{service.tariff.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Начисление</span>
+                      <strong>{service.currentCharge.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Коэффициент</span>
+                      <strong>{service.coefficient.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Перерасчёт</span>
+                      <strong>{service.recalculation.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Снижение</span>
+                      <strong>{service.reduction.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Долг/переплата</span>
+                      <strong>{service.debtOrOverpayment.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Платежи</span>
+                      <strong>{service.payments.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Пени</span>
+                      <strong>{service.penalties.value ?? '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Итог</span>
+                      <strong>{service.totalDue.value ?? '—'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="source-row">
+                    <span>Источник: {service.source.page}</span>
+                    <span>Способ: {service.source.method}</span>
+                    <span>Статус: {service.source.status}</span>
+                  </div>
+                </div>
+              ))}
+            </article>
+          ))}
         </div>
       </section>
 

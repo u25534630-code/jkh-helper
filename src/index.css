@@ -259,6 +259,77 @@ h1 {
   margin-top: 28px;
 }
 
+.structured-bill-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.structured-bill-card {
+  border: 1px solid rgba(121, 146, 175, 0.28);
+  border-radius: 16px;
+  background: #f7fbff;
+  padding: 18px;
+}
+
+.structured-header {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.structured-header > div {
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(122, 146, 177, 0.2);
+}
+
+.structured-service {
+  border-top: 1px solid rgba(122, 146, 177, 0.18);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.structured-service-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.structured-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.structured-grid > div {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 146, 177, 0.18);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.structured-grid span,
+.source-row,
+.source-row span {
+  font-size: 12px;
+  color: #5d7893;
+}
+
+.source-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
 .transfer-header {
   display: flex;
   justify-content: space-between;
