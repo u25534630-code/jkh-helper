@@ -5,7 +5,10 @@ import {
   buildStructuredBillDocument,
   calculateConsumption,
   buildMeterState,
+  calculateExpectedServiceCharge,
+  inferManagementCompany,
   parseVoiceCommand,
+  resolveOfficialTariffRate,
   type BillDocument,
   type Meter,
   type MeterRecord,
@@ -48,6 +51,32 @@ describe('buildMeterState', () => {
     const result = buildMeterState(meters, records);
     expect(result[0].reading).toBe(121.2);
     expect(result[0].previousReading).toBe(120.4);
+  });
+});
+
+describe('official tariff logic', () => {
+  it('uses the official 2026 water tariff from the company site', () => {
+    const rate = resolveOfficialTariffRate('Водоснабжение', '2026-06');
+    expect(rate?.rate2026_01).toBe(52.63);
+  });
+
+  it('calculates the expected charge using the official tariff', () => {
+    const expected = calculateExpectedServiceCharge('Водоотведение', 12, '2026-06');
+    expect(expected.expected).toBe(415.8);
+    expect(expected.rate).toBe(34.65);
+  });
+});
+
+describe('management company detection', () => {
+  it('recognizes the company by address when the property is in Yekaterinburg', () => {
+    const company = inferManagementCompany('Екатеринбург, ул. Ленина, 10');
+    expect(company?.name).toBe('ООО УК «Верх-Исетская»');
+    expect(company?.tariffPageUrl).toContain('tarify');
+    expect(company?.normsPageUrl).toContain('normativy');
+  });
+
+  it('returns null for an incomplete or unknown address', () => {
+    expect(inferManagementCompany('')).toBeNull();
   });
 });
 

@@ -1,65 +1,73 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import Tesseract from 'tesseract.js';
+import * as pdfjsLib from 'pdfjs-dist';
 import {
   buildMeterComparison,
   buildMonthChecklist,
   buildStructuredBillDocument,
   calculateConsumption,
+  inferManagementCompany,
   parseVoiceCommand,
   type BillDocument,
   type Meter,
   type MeterRecord,
 } from './lib/logic';
 
-const initialMeters: Meter[] = [
-  { id: 'kitchen-cold', label: 'Холодная вода кухня', location: 'Кухня', type: 'cold-water', unit: 'м³', reading: 118.4, previousReading: 116.1, lastUpdated: '2026-09-15' },
-  { id: 'bath-cold', label: 'Холодная вода ванная', location: 'Ванная', type: 'cold-water', unit: 'м³', reading: 95.1, previousReading: 91.7, lastUpdated: '2026-09-15' },
-  { id: 'kitchen-hot', label: 'Горячая вода кухня', location: 'Кухня', type: 'hot-water', unit: 'м³', reading: 74.6, previousReading: 71.2, lastUpdated: '2026-09-15' },
-  { id: 'bath-hot', label: 'Горячая вода ванная', location: 'Ванная', type: 'hot-water', unit: 'м³', reading: 88.9, previousReading: 84.3, lastUpdated: '2026-09-15' },
-  { id: 'electric', label: 'Электричество', location: 'Общий счётчик', type: 'electric', unit: 'кВт·ч', reading: 7480.5, previousReading: 7421.1, lastUpdated: '2026-09-15' },
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+const emptyMeterTemplate: Meter[] = [
+  { id: 'cold-water-kitchen', label: 'Холодная вода (кухня)', location: 'Кухня', type: 'cold-water', unit: 'м³', reading: null, previousReading: null, lastUpdated: '' },
+  { id: 'cold-water-bath', label: 'Холодная вода (ванная)', location: 'Ванная', type: 'cold-water', unit: 'м³', reading: null, previousReading: null, lastUpdated: '' },
+  { id: 'hot-water-kitchen', label: 'Горячая вода (кухня)', location: 'Кухня', type: 'hot-water', unit: 'м³', reading: null, previousReading: null, lastUpdated: '' },
+  { id: 'hot-water-bath', label: 'Горячая вода (ванная)', location: 'Ванная', type: 'hot-water', unit: 'м³', reading: null, previousReading: null, lastUpdated: '' },
+  { id: 'electricity-main', label: 'Электричество', location: 'Общий счётчик', type: 'electric', unit: 'кВт·ч', reading: null, previousReading: null, lastUpdated: '' },
 ];
 
-const meterNumbers: Record<string, string> = {
-  'kitchen-cold': '№ 12-4821',
-  'bath-cold': '№ 17-5402',
-  'kitchen-hot': '№ 12-4818',
-  'bath-hot': '№ 17-5487',
-  electric: '№ 345981',
+const initialMeters: Meter[] = emptyMeterTemplate;
+
+const meterNumbers: Record<string, string> = {};
+
+const initialRecords: MeterRecord[] = [];
+
+const emptyBillTemplate: BillDocument[] = [
+  {
+    id: 'bill-template',
+    provider: '',
+    period: '',
+    total: '',
+    rows: [
+      { id: 'svc-cold-water', label: 'Холодная вода', value: null, unit: 'м³', source: 'ocr', status: 'needs-check' },
+      { id: 'svc-hot-water', label: 'Горячая вода', value: null, unit: 'м³', source: 'ocr', status: 'needs-check' },
+      { id: 'svc-electricity', label: 'Электроэнергия', value: null, unit: 'кВт·ч', source: 'ocr', status: 'needs-check' },
+      { id: 'svc-total', label: 'Итого по квитанции', value: null, unit: '₽', source: 'manual', status: 'needs-check' },
+    ],
+  },
+];
+
+const initialBills: BillDocument[] = emptyBillTemplate;
+
+type PropertyProfile = {
+  id: string;
+  address: string;
+  managementCompany: string;
+  region: string;
+  tariffsUrl: string;
+  normsUrl: string;
+  notes: string;
 };
 
-const initialRecords: MeterRecord[] = [
-  { id: 'r1', meterId: 'kitchen-cold', value: 116.1, date: '2026-08-15', source: 'manual' },
-  { id: 'r2', meterId: 'kitchen-cold', value: 118.4, date: '2026-09-15', source: 'manual' },
-  { id: 'r3', meterId: 'bath-cold', value: 91.7, date: '2026-08-15', source: 'manual' },
-  { id: 'r4', meterId: 'bath-cold', value: 95.1, date: '2026-09-15', source: 'manual' },
-  { id: 'r5', meterId: 'kitchen-hot', value: 71.2, date: '2026-08-15', source: 'manual' },
-  { id: 'r6', meterId: 'kitchen-hot', value: 74.6, date: '2026-09-15', source: 'manual' },
-  { id: 'r7', meterId: 'bath-hot', value: 84.3, date: '2026-08-15', source: 'manual' },
-  { id: 'r8', meterId: 'bath-hot', value: 88.9, date: '2026-09-15', source: 'manual' },
-  { id: 'r9', meterId: 'electric', value: 7421.1, date: '2026-08-15', source: 'manual' },
-  { id: 'r10', meterId: 'electric', value: 7480.5, date: '2026-09-15', source: 'manual' },
-];
+const createPropertyProfile = (id: string, address = ''): PropertyProfile => ({
+  id,
+  address,
+  managementCompany: '',
+  region: 'Екатеринбург',
+  tariffsUrl: '',
+  normsUrl: '',
+  notes: 'Адрес ещё не подтверждён; УК определяется автоматически по признакам адреса.',
+});
 
-const initialBills: BillDocument[] = [
-  {
-    id: 'b1',
-    provider: 'УК «Дом»',
-    period: '2026-09',
-    total: '3698.40 ₽',
-    rows: [
-      { id: 'row-1', label: 'Холодная вода', value: 5.42, unit: 'м³', source: 'ocr', status: 'needs-check' },
-      { id: 'row-2', label: 'Горячая вода', value: 7.2, unit: 'м³', source: 'photo', status: 'confirmed' },
-      { id: 'row-3', label: 'Электричество', value: 526.5, unit: 'кВт·ч', source: 'ocr', status: 'needs-check' },
-    ],
-  },
-  {
-    id: 'b2',
-    provider: 'Мосэнергосбыт',
-    period: '2026-09',
-    total: '2140.10 ₽',
-    rows: [
-      { id: 'row-4', label: 'Электроэнергия', value: 2140.1, unit: '₽', source: 'manual', status: 'confirmed' },
-    ],
-  },
+const initialProperties: PropertyProfile[] = [
+  createPropertyProfile('property-1'),
 ];
 
 type LocalDocument = {
@@ -78,10 +86,142 @@ type ConfirmationEntry = {
   updatedAt: string;
 };
 
-const initialHistory: ConfirmationEntry[] = [
-  { id: 'hist-1', month: '2026-09', status: 'warning', summary: 'Проверить холодную воду и электричество', updatedAt: '2026-09-20 12:14' },
-  { id: 'hist-2', month: '2026-10', status: 'confirmed', summary: 'Показания и квитанции совпадают', updatedAt: '2026-10-02 09:20' },
-];
+const initialHistory: ConfirmationEntry[] = [];
+
+const normalizeBillNumber = (value: string): number | null => {
+  if (!value) return null;
+  const normalized = value
+    .replace(/[^0-9,.-]/g, '')
+    .replace(/,/g, '.')
+    .replace(/\s+/g, '');
+
+  if (!normalized || normalized === '-' || normalized === '.') return null;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeMonthValue = (value: string): string => {
+  const match = value.match(/(\d{4})\D*(\d{1,2})|(?:\D*)(\d{1,2})\D*(\d{4})/);
+  if (!match) return '';
+
+  const year = match[1] ?? match[4];
+  const month = match[2] ?? match[3];
+  if (!year || !month) return '';
+
+  const monthNumber = String(Number(month)).padStart(2, '0');
+  return `${year}-${monthNumber}`;
+};
+
+const buildServiceRowsFromText = (text: string): BillDocument['rows'] => {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const serviceDefinitions = [
+    { id: 'svc-cold-water', label: 'Холодная вода', keywords: ['холодная вода', 'вода холодная', 'водоснабжение холодная'], unit: 'м³' },
+    { id: 'svc-hot-water', label: 'Горячая вода', keywords: ['горячая вода', 'вода горячая', 'водоснабжение горячая'], unit: 'м³' },
+    { id: 'svc-electricity', label: 'Электроэнергия', keywords: ['электроэнергия', 'электричество', 'энергия'], unit: 'кВт·ч' },
+    { id: 'svc-total', label: 'Итого по квитанции', keywords: ['итого', 'итого по квитанции', 'к оплате'], unit: '₽' },
+  ];
+
+  const rows: BillDocument['rows'] = serviceDefinitions.map((definition) => ({
+    id: definition.id,
+    label: definition.label,
+    value: null,
+    unit: definition.unit,
+    source: 'ocr' as const,
+    status: 'needs-check' as const,
+  }));
+
+  lines.forEach((line, index) => {
+    const lowered = line.toLowerCase();
+    for (const definition of serviceDefinitions) {
+      const matchedKeyword = definition.keywords.find((keyword) => lowered.includes(keyword));
+      if (!matchedKeyword) continue;
+
+      const window = lines.slice(Math.max(0, index - 2), Math.min(lines.length, index + 4)).join(' ');
+      const sample = window.replace(/\s+/g, ' ');
+      const numbers = [...sample.matchAll(/\d+(?:[.,]\d+)?/g)].map((match) => match[0]);
+      const value = numbers.length > 0 ? normalizeBillNumber(numbers[numbers.length - 1]) : null;
+
+      const row = rows.find((item) => item.id === definition.id);
+      if (row && value !== null) {
+        row.value = value;
+        row.label = definition.label;
+        row.unit = definition.unit;
+        row.source = 'ocr';
+      }
+    }
+  });
+
+  return rows;
+};
+
+const extractBillDataFromText = (text: string): Partial<BillDocument> => {
+  const normalized = text.replace(/\u00a0/g, ' ');
+  const provider = (() => {
+    const candidates = ['ПАО', 'Водоканал', 'РКЦ', 'Расчетный центр', 'Единый', 'ЖКХ', 'УК', 'Мосэнергосбыт', 'Энергосбыт'];
+    const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      const lowered = line.toLowerCase();
+      if (candidates.some((candidate) => lowered.includes(candidate.toLowerCase()))) {
+        return line;
+      }
+    }
+
+    return '';
+  })();
+
+  const monthMatch = normalized.match(/(\d{4}[\-./ ]\d{1,2}|\d{1,2}[\-./ ]\d{4}|\d{1,2}\.\d{4})/);
+  const period = monthMatch ? normalizeMonthValue(monthMatch[0]) : '';
+
+  const totalMatch = normalized.match(/(\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?)\s*(?:₽|руб|руб\.|рублей|rur)/i);
+  const total = totalMatch ? totalMatch[1].replace(/\s+/g, '').replace(',', '.') : '';
+
+  return {
+    provider,
+    period,
+    total: total ? `${total} ₽` : '',
+    rows: buildServiceRowsFromText(normalized),
+  };
+};
+
+const renderPdfPageToImage = async (file: File): Promise<string> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 1.8 });
+
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Не удалось создать canvas для PDF');
+  }
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  await page.render({ canvas, canvasContext: context, viewport }).promise;
+  return canvas.toDataURL('image/png');
+};
+
+const readDocumentText = async (file: File): Promise<string> => {
+  if (file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')) {
+    const imageDataUrl = await renderPdfPageToImage(file);
+    const result = await Tesseract.recognize(imageDataUrl, 'rus+eng', {
+      logger: () => undefined,
+    });
+    return result.data.text;
+  }
+
+  const result = await Tesseract.recognize(file, 'rus+eng', {
+    logger: () => undefined,
+  });
+
+  return result.data.text;
+};
 
 const formatStructuredValue = (value: number | string | null | undefined, fallback = 'Нет данных') => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -125,24 +265,127 @@ function App() {
   });
   const [documents, setDocuments] = useState<LocalDocument[]>(() => {
     const saved = localStorage.getItem('jkh-helper-documents');
-    return saved ? JSON.parse(saved) : [
-      { id: 'doc-1', name: 'kvitancia-september.pdf', type: 'pdf', sizeLabel: '842 KB', uploadedAt: '2026-09-20 12:14' },
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
   const [confirmationHistory, setConfirmationHistory] = useState<ConfirmationEntry[]>(() => {
     const saved = localStorage.getItem('jkh-helper-confirmation-history');
     return saved ? JSON.parse(saved) : initialHistory;
   });
-  const [selectedMonth, setSelectedMonth] = useState('2026-10');
-  const [draftValues, setDraftValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(initialMeters.map((meter) => [meter.id, String(meter.reading ?? '')])),
-  );
+  const [properties, setProperties] = useState<PropertyProfile[]>(() => {
+    const saved = localStorage.getItem('jkh-helper-properties');
+    return saved ? JSON.parse(saved) : initialProperties;
+  });
+  const [selectedPropertyId, setSelectedPropertyId] = useState(() => {
+    const saved = localStorage.getItem('jkh-helper-selected-property');
+    return saved ?? 'property-1';
+  });
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [transferCopied, setTransferCopied] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Голосовой ввод выключен');
   const [isListening, setIsListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any>(null);
+
+  const currentBill = bills[0] ?? initialBills[0];
+
+  const managementCompanyFields = useMemo(() => {
+    const parsedRows = currentBill.rows
+      .filter((row) => row.id !== 'svc-total')
+      .map((row) => ({ ...row, numericValue: row.value === null || Number.isNaN(row.value) ? null : Number(row.value) }))
+      .filter((row) => row.numericValue !== null);
+
+    const serviceCharge = parsedRows.reduce((sum, row) => sum + (row.numericValue ?? 0), 0);
+    const totalValue = currentBill.total ? Number.parseFloat(currentBill.total.replace(/[^0-9,.-]/g, '').replace(',', '.')) : null;
+    const effectiveCharge = serviceCharge > 0 ? serviceCharge : totalValue;
+    const finalTotal = totalValue !== null ? totalValue : (serviceCharge > 0 ? serviceCharge : null);
+
+    const formatAmount = (value: number | null) => value === null || Number.isNaN(value) ? '—' : `${value.toFixed(2)} ₽`;
+
+    return [
+      { id: 'charge', label: 'Начислено', value: formatAmount(effectiveCharge) },
+      { id: 'recalculation', label: 'Перерасчёт', value: '—' },
+      { id: 'payment', label: 'Оплата', value: '—' },
+      { id: 'debt', label: 'Долг / переплата', value: '—' },
+      { id: 'final-total', label: 'Итого по УК', value: formatAmount(finalTotal) },
+    ];
+  }, [currentBill.rows, currentBill.total]);
+
+  const managementCompanyDetails = useMemo(() => {
+    return currentBill.rows
+      .filter((row) => row.id !== 'svc-total')
+      .map((row) => ({
+        ...row,
+        numericValue: row.value === null || Number.isNaN(row.value) ? null : Number(row.value),
+      }))
+      .filter((row) => row.label.trim() || row.numericValue !== null);
+  }, [currentBill.rows]);
+
+  const unresolvedBillFields = useMemo(() => {
+    const items: Array<{ id: string; label: string; reason: string; confidence: 'low' | 'medium' | 'high'; }> = [];
+
+    if (!currentBill.provider.trim()) {
+      items.push({ id: 'provider', label: 'Поставщик', reason: 'Поле не распознано', confidence: 'low' });
+    }
+
+    if (!currentBill.period.trim()) {
+      items.push({ id: 'period', label: 'Период', reason: 'Поле не распознано', confidence: 'low' });
+    }
+
+    if (!currentBill.total.trim()) {
+      items.push({ id: 'total', label: 'Итого', reason: 'Поле не распознано', confidence: 'low' });
+    }
+
+    currentBill.rows.forEach((row) => {
+      if (!row.label.trim()) {
+        items.push({ id: `${row.id}-label`, label: `${row.label || 'Услуга'} · название`, reason: 'Название не распознано', confidence: 'low' });
+      }
+
+      if (row.value === null || Number.isNaN(row.value)) {
+        items.push({ id: `${row.id}-value`, label: `${row.label || 'Услуга'} · значение`, reason: 'Число не распознано', confidence: 'medium' });
+      }
+
+      if (!row.unit.trim()) {
+        items.push({ id: `${row.id}-unit`, label: `${row.label || 'Услуга'} · единицы`, reason: 'Единицы не распознаны', confidence: 'medium' });
+      }
+
+      if (row.status === 'needs-check') {
+        items.push({ id: `${row.id}-status`, label: `${row.label || 'Услуга'}`, reason: 'Нужно проверить вручную', confidence: 'high' });
+      }
+    });
+
+    return items;
+  }, [currentBill]);
+
+  const updateBillField = (field: 'provider' | 'period' | 'total', value: string) => {
+    setBills((prev) => {
+      const next = prev.length > 0 ? [...prev] : [...initialBills];
+      next[0] = {
+        ...next[0],
+        [field]: value,
+      };
+      return next;
+    });
+  };
+
+  const updateBillRowField = (rowId: string, field: 'label' | 'value' | 'unit' | 'status', value: string | number | null) => {
+    setBills((prev) => {
+      const next = prev.length > 0 ? [...prev] : [...initialBills];
+      next[0] = {
+        ...next[0],
+        rows: next[0].rows.map((row) =>
+          row.id === rowId
+            ? {
+                ...row,
+                [field]: field === 'value' ? (value === '' ? null : Number(value)) : value,
+              }
+            : row,
+        ),
+      };
+      return next;
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem('jkh-helper-meters', JSON.stringify(meters));
@@ -163,6 +406,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('jkh-helper-confirmation-history', JSON.stringify(confirmationHistory));
   }, [confirmationHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('jkh-helper-properties', JSON.stringify(properties));
+  }, [properties]);
+
+  useEffect(() => {
+    localStorage.setItem('jkh-helper-selected-property', selectedPropertyId);
+  }, [selectedPropertyId]);
 
   useEffect(() => {
     const nextDraft = Object.fromEntries(meters.map((meter) => [meter.id, String(meter.reading ?? '')]));
@@ -270,6 +521,34 @@ function App() {
     return [currentEntry, ...withoutCurrent].slice(0, 6);
   }, [confirmationHistory, currentMonthStatus, monthChecklist.length, selectedMonth]);
 
+  const selectedProperty = properties.find((property) => property.id === selectedPropertyId) ?? properties[0] ?? initialProperties[0];
+
+  const updateProperty = (propertyId: string, updates: Partial<PropertyProfile>) => {
+    setProperties((prev) => prev.map((property) => (property.id === propertyId ? { ...property, ...updates } : property)));
+  };
+
+  const handlePropertyAddressUpdate = (propertyId: string, address: string) => {
+    const company = inferManagementCompany(address);
+
+    updateProperty(propertyId, {
+      address,
+      managementCompany: company?.name ?? '',
+      region: company?.region ?? 'Регион уточняется',
+      tariffsUrl: company?.tariffPageUrl ?? '',
+      normsUrl: company?.normsPageUrl ?? '',
+      notes: company
+        ? 'УК определена автоматически по адресу. Следующий шаг — скачать и сверить тарифы и нормативы для данного региона.'
+        : 'Нет уверенного совпадения по адресу. Нужно уточнить УК вручную.',
+    });
+  };
+
+  const addProperty = () => {
+    const nextId = `property-${Date.now()}`;
+    const nextProperty = createPropertyProfile(nextId);
+    setProperties((prev) => [...prev, nextProperty]);
+    setSelectedPropertyId(nextId);
+  };
+
   const addSampleReading = () => {
     const next = meters.map((meter, index) => {
       const nextValue = Number((meter.reading! + (index + 1) * 0.7).toFixed(3));
@@ -345,7 +624,7 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDocumentUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -362,6 +641,49 @@ function App() {
     });
 
     setDocuments((prev) => [...nextDocuments, ...prev]);
+
+    const file = files[0];
+    try {
+      setVoiceStatus('Распознавание документа…');
+      const text = await readDocumentText(file);
+      const extracted = extractBillDataFromText(text);
+
+      setBills((prev) => {
+        const next = prev.length > 0 ? [...prev] : [...initialBills];
+        const base = next[0] ?? initialBills[0];
+        const mappedRows: BillDocument['rows'] = base.rows.map((row) => {
+          const matched = extracted.rows?.find((candidate) => candidate.id === row.id);
+          if (!matched) return row;
+          return {
+            ...row,
+            label: matched.label || row.label,
+            value: matched.value ?? row.value,
+            unit: matched.unit || row.unit,
+            source: 'ocr' as const,
+          };
+        });
+
+        next[0] = {
+          ...base,
+          provider: extracted.provider || base.provider,
+          period: extracted.period || base.period,
+          total: extracted.total || base.total,
+          rows: mappedRows,
+        };
+
+        return next;
+      });
+
+      if (extracted.period) {
+        setSelectedMonth(extracted.period);
+      }
+
+      setVoiceStatus('Документ распознан. Проверьте поля и поправьте неразборчивые значения.');
+    } catch (error) {
+      console.error('OCR extraction failed', error);
+      setVoiceStatus('Не удалось автоматически распознать документ; поля можно заполнить вручную.');
+    }
+
     event.target.value = '';
   };
 
@@ -497,21 +819,228 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Этап 1 · Базовый интерфейс</p>
+          <p className="eyebrow">Шаблон разбора квитанции ЖКХ</p>
           <h1>Помощник ЖКХ</h1>
         </div>
         <div className="voice-controls">
           <button className={`voice-button ${isListening ? 'listening' : ''}`} onClick={toggleVoiceRecognition}>
             {isListening ? '⏹ Голос' : '🎙 Голос'}
           </button>
-          <button className="primary" onClick={addSampleReading}>Добавить тестовое показание</button>
         </div>
       </header>
 
       <div className="voice-status-panel">
-        <span>Голос:</span>
-        <strong>{voiceStatus}</strong>
+        <span>Примечание:</span>
+        <strong>Нечитаемые данные не подставляются автоматически; пустые поля остаются пустыми до проверки.</strong>
       </div>
+
+      <section className="panel property-panel">
+        <div className="transfer-header">
+          <h2>Объекты и управляющие компании</h2>
+          <button className="primary small" onClick={addProperty}>Добавить объект</button>
+        </div>
+
+        <div className="property-grid">
+          {properties.map((property) => (
+            <article
+              key={property.id}
+              className={`property-card ${property.id === selectedProperty.id ? 'selected' : ''}`}
+            >
+              <div className="property-card-header">
+                <strong>{property.address || 'Адрес не указан'}</strong>
+                <button
+                  className="ghost xs"
+                  onClick={() => setSelectedPropertyId(property.id)}
+                >
+                  {property.id === selectedProperty.id ? 'Выбран' : 'Выбрать'}
+                </button>
+              </div>
+
+              <label className="input-field compact">
+                <span>Адрес объекта</span>
+                <input
+                  value={property.address}
+                  onChange={(event) => handlePropertyAddressUpdate(property.id, event.target.value)}
+                  placeholder="Например: Екатеринбург, ул. Ленина, 42"
+                />
+              </label>
+
+              <div className="property-meta-row">
+                <span>УК</span>
+                <strong>{property.managementCompany || 'Не определена'}</strong>
+              </div>
+
+              <div className="property-meta-row">
+                <span>Регион</span>
+                <strong>{property.region}</strong>
+              </div>
+
+              <div className="property-link-list">
+                {property.tariffsUrl ? (
+                  <a href={property.tariffsUrl} target="_blank" rel="noreferrer">Открыть тарифы</a>
+                ) : null}
+                {property.normsUrl ? (
+                  <a href={property.normsUrl} target="_blank" rel="noreferrer">Открыть нормативы</a>
+                ) : null}
+              </div>
+
+              <p className="property-note">{property.notes}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel bill-entry-panel">
+        <div className="transfer-header">
+          <h2>Разбор квитанции</h2>
+          <button className="primary small" onClick={() => fileInputRef.current?.click()}>
+            Загрузить документ
+          </button>
+        </div>
+
+        <div className="document-meta-grid">
+          <label className="input-field">
+            <span>Поставщик</span>
+            <input
+              value={currentBill.provider}
+              onChange={(event) => updateBillField('provider', event.target.value)}
+              placeholder="Например: ПАО «Водоканал»"
+            />
+          </label>
+
+          <label className="input-field">
+            <span>Период</span>
+            <input
+              type="month"
+              value={selectedMonth || currentBill.period || ''}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setSelectedMonth(nextValue);
+                updateBillField('period', nextValue);
+              }}
+            />
+          </label>
+
+          <label className="input-field">
+            <span>Итого</span>
+            <input
+              value={currentBill.total}
+              onChange={(event) => updateBillField('total', event.target.value)}
+              placeholder="Например: 9802.06 ₽"
+            />
+          </label>
+        </div>
+
+        <div className="bill-editor-list">
+          {currentBill.rows.map((row) => (
+            <div key={row.id} className="bill-row-editor">
+              <label className="input-field">
+                <span>Услуга</span>
+                <input
+                  value={row.label}
+                  onChange={(event) => updateBillRowField(row.id, 'label', event.target.value)}
+                  placeholder="Нечитаемо — оставьте пустым"
+                />
+              </label>
+
+              <label className="input-field">
+                <span>Объём</span>
+                <input
+                  type="number"
+                  step="0.001"
+                  value={row.value ?? ''}
+                  onChange={(event) => updateBillRowField(row.id, 'value', event.target.value)}
+                  placeholder="—"
+                />
+              </label>
+
+              <label className="input-field">
+                <span>Ед. изм.</span>
+                <input
+                  value={row.unit}
+                  onChange={(event) => updateBillRowField(row.id, 'unit', event.target.value)}
+                  placeholder="м³ / кВт·ч / ₽"
+                />
+              </label>
+
+              <label className="input-field small-field">
+                <span>Статус</span>
+                <select
+                  value={row.status}
+                  onChange={(event) => updateBillRowField(row.id, 'status', event.target.value)}
+                >
+                  <option value="needs-check">Нужно проверить</option>
+                  <option value="confirmed">Подтверждено</option>
+                  <option value="issue">Проблема</option>
+                </select>
+              </label>
+            </div>
+          ))}
+        </div>
+
+        {documents.length > 0 && (
+          <div className="uploaded-documents">
+            <h3>Загруженные документы</h3>
+            <ul>
+              {documents.map((document) => (
+                <li key={document.id}>
+                  <strong>{document.name}</strong>
+                  <span>{document.type.toUpperCase()} · {document.sizeLabel}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {unresolvedBillFields.length > 0 && (
+          <div className="unresolved-fields">
+            <h3>Неразобранные поля</h3>
+            <ul>
+              {unresolvedBillFields.map((field) => (
+                <li key={field.id} className={`field-warning confidence-${field.confidence}`}>
+                  <div className="field-warning-header">
+                    <strong>{field.label}</strong>
+                    <span className={`confidence-badge confidence-${field.confidence}`}>
+                      {field.confidence === 'high' ? 'высокая' : field.confidence === 'medium' ? 'средняя' : 'низкая'}
+                    </span>
+                  </div>
+                  <span>{field.reason}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section className="panel management-company-panel">
+        <div className="transfer-header">
+          <h2>Расчёты управляющей компании</h2>
+        </div>
+        <p className="section-note">Квитанция УК включает не только воду и электричество: отопление, уборку, подогрев, доставка воды, общедомовое электричество и другие услуги. Здесь показываются все строки, кроме итоговой суммы.</p>
+
+        <div className="management-company-grid">
+          {managementCompanyFields.map((field) => (
+            <div key={field.id} className="management-company-item">
+              <span>{field.label}</span>
+              <strong>{field.value}</strong>
+            </div>
+          ))}
+        </div>
+
+        {managementCompanyDetails.length > 0 && (
+          <div className="management-company-details">
+            <h3>Детализация по услугам</h3>
+            <div className="management-company-details-list">
+              {managementCompanyDetails.map((row) => (
+                <div key={row.id} className="management-company-detail-row">
+                  <span>{row.label || 'Услуга не распознана'}</span>
+                  <strong>{row.numericValue === null ? '—' : `${row.numericValue.toFixed(2)} ${row.unit || '₽'}`}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="toolbar">
         <label className="month-picker">
@@ -793,7 +1322,6 @@ function App() {
             className="hidden-file-input"
             onChange={handleDocumentUpload}
           />
-          <button className="primary small" onClick={() => fileInputRef.current?.click()}>Загрузить документ</button>
         </div>
 
         <div className="document-list">

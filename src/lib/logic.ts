@@ -178,6 +178,244 @@ export function buildStructuredBillDocument(
   };
 }
 
+export type OfficialServiceTariff = {
+  provider: string;
+  service: string;
+  unit: string;
+  rate2026_01: number;
+  rate2026_10: number | null;
+  source: string;
+};
+
+export type ManagementCompanyProfile = {
+  id: string;
+  name: string;
+  region: string;
+  tariffPageUrl: string;
+  normsPageUrl: string;
+  searchTerms: string[];
+};
+
+export const DEFAULT_MANAGEMENT_COMPANIES: ManagementCompanyProfile[] = [
+  {
+    id: 'uk-verh-isetskaya',
+    name: 'ООО УК «Верх-Исетская»',
+    region: 'Екатеринбург',
+    tariffPageUrl: 'https://www.ukviz.ru/normativnye-akty/tarify/tarify.html',
+    normsPageUrl: 'https://www.ukviz.ru/normativnye-akty/normativy',
+    searchTerms: ['верх-исетская', 'верх исетская', 'верхисетская', 'укт', 'екатеринбург'],
+  },
+  {
+    id: 'uk-city',
+    name: 'ООО "УК ..."',
+    region: 'Регион уточняется',
+    tariffPageUrl: '',
+    normsPageUrl: '',
+    searchTerms: [],
+  },
+];
+
+export function inferManagementCompany(address: string): ManagementCompanyProfile | null {
+  const normalized = (address || '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  for (const company of DEFAULT_MANAGEMENT_COMPANIES) {
+    if (company.id === 'uk-city') continue;
+    const match = company.searchTerms.some((term) => normalized.includes(term.toLowerCase()));
+    if (match) return company;
+  }
+
+  if (normalized.includes('екатеринбург') || normalized.includes('верх-исетский') || normalized.includes('верх исетский')) {
+    return DEFAULT_MANAGEMENT_COMPANIES[0];
+  }
+
+  return null;
+}
+
+export const UK_VERH_ISET_2026_TARIFFS: OfficialServiceTariff[] = [
+  {
+    provider: 'Екатеринбургское муниципальное унитарное предприятие водопроводно-канализационного хозяйства (МУП "Водоканал")',
+    service: 'Водоотведение',
+    unit: 'м3',
+    rate2026_01: 34.65,
+    rate2026_10: 36.83,
+    source: 'Постановление РЭК Свердловской области от 09.12.2021 № 208-ПК (в ред. Постановления РЭК Свердловской области от 15.12.2025 № 294-ПК)',
+  },
+  {
+    provider: 'Екатеринбургское муниципальное унитарное предприятие водопроводно-канализационного хозяйства (МУП "Водоканал")',
+    service: 'Водоснабжение',
+    unit: 'м3',
+    rate2026_01: 52.63,
+    rate2026_10: 59.41,
+    source: 'Постановление РЭК Свердловской области от 09.12.2021 № 208-ПК (в ред. Постановления РЭК Свердловской области от 15.12.2025 № 294-ПК)',
+  },
+  {
+    provider: 'Публичное акционерное общество "Т Плюс"',
+    service: 'ГВС (компонент на тепловую энергию)',
+    unit: 'Гкал',
+    rate2026_01: 2899.98,
+    rate2026_10: 3274.08,
+    source: 'Постановление РЭК Свердловской области от 14.11.2025 №172-ПК / Приказ филиала «Свердловский» ПАО «Т Плюс» от 26.12.2025 № 453',
+  },
+  {
+    provider: 'Публичное акционерное общество "Т Плюс"',
+    service: 'ГВС (компонент на теплоноситель)',
+    unit: 'м3',
+    rate2026_01: 49.26,
+    rate2026_10: 54.62,
+    source: 'Постановление РЭК Свердловской области от 14.11.2025 №172-ПК / Приказ филиала «Свердловский» ПАО «Т Плюс» от 26.12.2025 № 453',
+  },
+  {
+    provider: 'Публичное акционерное общество "Т Плюс"',
+    service: 'Теплоснабжение',
+    unit: 'Гкал',
+    rate2026_01: 2899.98,
+    rate2026_10: 3274.08,
+    source: 'Постановление РЭК Свердловской области от 14.11.2025 №172-ПК / Приказ филиала «Свердловский» ПАО «Т Плюс» от 26.12.2025 № 453',
+  },
+  {
+    provider: 'Акционерное общество "ТЭЦ ВИЗа"',
+    service: 'Теплоснабжение',
+    unit: 'Гкал',
+    rate2026_01: 1333.81,
+    rate2026_10: 1505.6,
+    source: 'Постановление РЭК Свердловской области от 09.12.2021 № 205-ПК (в ред. Постановления РЭК Свердловской области от 15.12.2025 № 203-ПК)',
+  },
+  {
+    provider: 'Акционерное общество "ТЭЦ ВИЗа"',
+    service: 'ГВС (компонент на тепловую энергию)',
+    unit: 'Гкал',
+    rate2026_01: 1333.81,
+    rate2026_10: 1505.6,
+    source: 'Постановление РЭК Свердловской области от 13.12.2023 № 229-ПК (в ред. Постановления РЭК Свердловской области от 18.12.2025 № 306-ПК)',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Природный газ',
+    unit: 'м3',
+    rate2026_01: 7.55,
+    rate2026_10: null,
+    source: 'Постановление РЭК Свердловской области от 19.06.2025 № 75-ПК (в ред. Постановления РЭК Свердловской области от 29.12.2025 № 338-ПК)',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (одноставочный, газ.плиты)',
+    unit: 'кВтч',
+    rate2026_01: 6.43,
+    rate2026_10: 7.15,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (дневная зона)',
+    unit: 'кВтч',
+    rate2026_01: 7.67,
+    rate2026_10: 8.45,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (ночная зона)',
+    unit: 'кВтч',
+    rate2026_01: 3.86,
+    rate2026_10: 4.29,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (электроплиты, одноставочный)',
+    unit: 'кВтч',
+    rate2026_01: 4.5,
+    rate2026_10: 5.01,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (электроплиты, дневная зона)',
+    unit: 'кВтч',
+    rate2026_01: 5.37,
+    rate2026_10: 5.92,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'АО "Екатеринбурггаз"',
+    service: 'Электроэнергия (электроплиты, ночная зона)',
+    unit: 'кВтч',
+    rate2026_01: 3.0,
+    rate2026_10: 3.0,
+    source: 'Постановление РЭК Свердловской области от 29.12.2025 г. № 327-ПК',
+  },
+  {
+    provider: 'Екатеринбургское муниципальное унитарное предприятие "Специализированная автобаза"',
+    service: 'Обращение с твердыми коммунальными отходами',
+    unit: 'куб. м',
+    rate2026_01: 789.8,
+    rate2026_10: 865.63,
+    source: 'Постановление РЭК Свердловской области от 30.08.2023 № 89-ПК (в ред. Постановления РЭК Свердловской области от 18.12.2025 № 323-ПК)',
+  },
+];
+
+function normalizeServiceKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^а-яёa-z0-9]/g, '')
+    .replace(/\s+/g, '');
+}
+
+export function resolveOfficialTariffRate(serviceLabel: string, date: string): OfficialServiceTariff | null {
+  const targetDate = new Date(`${date}-01T00:00:00`);
+  const key = normalizeServiceKey(serviceLabel);
+
+  const candidates = UK_VERH_ISET_2026_TARIFFS.filter((entry) => {
+    const serviceKey = normalizeServiceKey(entry.service);
+    return serviceKey.includes(key) || key.includes(serviceKey);
+  });
+
+  const candidate = candidates[0] ?? null;
+  if (!candidate) return null;
+
+  const isAfterOctober = targetDate >= new Date('2026-10-01T00:00:00');
+  const selectedRate = isAfterOctober && candidate.rate2026_10 !== null && candidate.rate2026_10 !== undefined
+    ? candidate.rate2026_10
+    : candidate.rate2026_01;
+
+  return {
+    ...candidate,
+    rate2026_01: selectedRate,
+    rate2026_10: candidate.rate2026_10 ?? null,
+  };
+}
+
+export function calculateExpectedServiceCharge(serviceLabel: string, quantity: number | null, date: string): {
+  expected: number | null;
+  rate: number | null;
+  unit: string | null;
+  source: string | null;
+  service: string | null;
+} {
+  if (quantity === null || Number.isNaN(quantity) || quantity < 0) {
+    return { expected: null, rate: null, unit: null, source: null, service: null };
+  }
+
+  const tariff = resolveOfficialTariffRate(serviceLabel, date);
+  if (!tariff) {
+    return { expected: null, rate: null, unit: null, source: null, service: null };
+  }
+
+  const targetDate = new Date(`${date}-01T00:00:00`);
+  const effectiveRate = targetDate >= new Date('2026-10-01T00:00:00') && tariff.rate2026_10 !== null && tariff.rate2026_10 !== undefined
+    ? tariff.rate2026_10
+    : tariff.rate2026_01;
+
+  return {
+    expected: Number((quantity * effectiveRate).toFixed(2)),
+    rate: effectiveRate,
+    unit: tariff.unit,
+    source: tariff.source,
+    service: tariff.service,
+  };
+}
+
 export function calculateConsumption(current: number | null, previous: number | null): number | null {
   if (current === null || previous === null) return null;
   if (current < previous) return null;
@@ -302,25 +540,26 @@ export function parseVoiceCommand(input: string, meterLabels: string[] = []): Vo
   return { kind: 'unknown', raw: input };
 }
 
+function matchesMeterTypeLabel(meterType: MeterType, rowLabel: string): boolean {
+  const normalized = normalizeText(rowLabel);
+  if (!normalized) return false;
+
+  if (meterType === 'cold-water') {
+    return normalized.includes('холод') || normalized.includes('watercold') || normalized.includes('водахолодная');
+  }
+
+  if (meterType === 'hot-water') {
+    return normalized.includes('горяч') || normalized.includes('waterhot') || normalized.includes('водагорячая');
+  }
+
+  return normalized.includes('элект') || normalized.includes('энерг') || normalized.includes('electric');
+}
+
 export function buildMeterComparison(meters: Meter[], bills: BillDocument[]): MeterComparison[] {
   return meters.map((meter) => {
     const meterConsumption = calculateConsumption(meter.reading, meter.previousReading);
-    const matchedRow = bills
-      .flatMap((bill) => bill.rows)
-      .find((row) => {
-        const label = normalizeText(row.label);
-
-        if (meter.type === 'cold-water') {
-          return label.includes('холод') || label.includes('watercold');
-        }
-
-        if (meter.type === 'hot-water') {
-          return label.includes('горяч') || label.includes('waterhot');
-        }
-
-        return label.includes('элект') || label.includes('энерг');
-      });
-
+    const billRows = bills.flatMap((bill) => bill.rows.filter((row) => matchesMeterTypeLabel(meter.type, row.label)));
+    const matchedRow = billRows[0] ?? null;
     const billValue = matchedRow?.value ?? null;
 
     if (meterConsumption === null) {
@@ -393,20 +632,7 @@ export function buildMonthChecklist(meters: Meter[], bills: BillDocument[]): Mon
     for (const row of bill.rows) {
       if (row.status === 'confirmed') continue;
 
-      const matchedMeter = meters.find((meter) => {
-        const label = normalizeText(row.label);
-
-        if (meter.type === 'cold-water') {
-          return label.includes('холод') || label.includes('watercold');
-        }
-
-        if (meter.type === 'hot-water') {
-          return label.includes('горяч') || label.includes('waterhot');
-        }
-
-        return label.includes('элект') || label.includes('энерг');
-      });
-
+      const matchedMeter = meters.find((meter) => matchesMeterTypeLabel(meter.type, row.label));
       if (!matchedMeter) continue;
 
       const existing = candidateMap.get(matchedMeter.id);
@@ -419,7 +645,7 @@ export function buildMonthChecklist(meters: Meter[], bills: BillDocument[]): Mon
           : 'Строка квитанции требует ручной проверки.',
       };
 
-      if (!existing || (existing.severity === 'warning' && nextItem.severity === 'issue')) {
+      if (!existing || existing.severity === 'warning' && nextItem.severity === 'issue') {
         candidateMap.set(matchedMeter.id, nextItem);
       }
     }
